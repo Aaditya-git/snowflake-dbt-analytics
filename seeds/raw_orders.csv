@@ -1,0 +1,9 @@
+order_id,customer_id,order_ts,payload
+5001,1,2023-05-01 09:23:00,"{""channel"":""web"",""device"":""mobile"",""items"":[{""product_id"":101,""qty"":2},{""product_id"":104,""qty"":1}],""promo"":{""applied"":true,""code"":""SAVE10""}}"
+5002,2,2023-05-02 14:05:00,"{""channel"":""app"",""device"":""ios"",""items"":[{""product_id"":103,""qty"":1}],""promo"":{""applied"":false,""code"":null}}"
+5003,3,2023-05-03 11:30:00,"{""channel"":""web"",""device"":""desktop"",""items"":[{""product_id"":102,""qty"":1},{""product_id"":101,""qty"":1},{""product_id"":106,""qty"":1}],""promo"":{""applied"":true,""code"":""WELCOME""}}"
+5004,1,2023-06-10 16:45:00,"{""channel"":""store"",""device"":""pos"",""items"":[{""product_id"":105,""qty"":2}],""promo"":{""applied"":false,""code"":null}}"
+5005,4,2023-06-15 08:12:00,"{""channel"":""app"",""device"":""android"",""items"":[{""product_id"":106,""qty"":1},{""product_id"":104,""qty"":2}],""promo"":{""applied"":false,""code"":null}}"
+5006,5,2023-07-01 19:20:00,"{""channel"":""web"",""device"":""desktop"",""items"":[{""product_id"":103,""qty"":2}],""promo"":{""applied"":true,""code"":""SUMMER""}}"
+5007,2,2023-07-04 10:00:00,"{""channel"":""web"",""device"":""mobile"",""items"":[{""product_id"":101,""qty"":3}],""promo"":{""applied"":false,""code"":null}}"
+5008,3,2023-08-20 13:37:00,"{""channel"":""store"",""device"":""pos"",""items"":[{""product_id"":102,""qty"":1},{""product_id"":105,""qty"":1}],""promo"":{""applied"":false,""code"":null}}"
