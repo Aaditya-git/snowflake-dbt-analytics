@@ -1,0 +1,30 @@
+name: 'snowflake_dbt_analytics'
+version: '1.0.0'
+config-version: 2
+
+profile: 'snowflake_dbt_analytics'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  snowflake_dbt_analytics:
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: marts
+
+seeds:
+  snowflake_dbt_analytics:
+    +schema: raw
