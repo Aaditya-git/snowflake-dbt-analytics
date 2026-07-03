@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: "Customer dimension (one row per customer)."
+    columns:
+      - name: customer_id
+        description: "Surrogate/natural key for the customer dimension."
+        tests: [not_null, unique]
+
+  - name: dim_products
+    description: "Product dimension (one row per product)."
+    columns:
+      - name: product_id
+        tests: [not_null, unique]
+
+  - name: dim_dates
+    description: "Date dimension generated from a date spine."
+    columns:
+      - name: date_key
+        tests: [not_null, unique]
+
+  - name: fct_order_items
+    description: >
+      Order-line-grain fact table (one row per product per order), joined to the
+      customer, product, and date dimensions. Star schema center.
+    columns:
+      - name: order_item_key
+        description: "Surrogate key: hash of order_id + product_id."
+        tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+      - name: product_id
+        tests:
+          - relationships:
+              to: ref('dim_products')
+              field: product_id
+      - name: order_date
+        tests:
+          - relationships:
+              to: ref('dim_dates')
+              field: date_key
+      - name: quantity
+        tests: [not_null]
+      - name: line_amount
+        tests: [not_null]
