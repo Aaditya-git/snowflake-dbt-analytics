@@ -1,0 +1,88 @@
+version: 2
+
+models:
+
+  - name: bronze_customers
+    description: >
+      Customer feed as landed, typed but unfiltered. Contains duplicates from CDC
+      replays and rows that will not survive the silver gate -- that is the contract
+      of this layer, not a defect in it.
+    config:
+      contract: {enforced: false}
+    columns:
+      - name: customer_id
+        description: "Natural key from the source system. Null where the source omitted it."
+        # Warn, not error. Bronze reports what arrived; it does not get a vote on
+        # whether the source should have sent it. Erroring here would mean one bad
+        # row from an upstream team stops our pipeline, which is their outage
+        # becoming ours. The signal still shows up in the run summary.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: email
+        tests:
+          - valid_email:
+              config:
+                severity: warn
+      - name: signup_date
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: source_updated_at
+        description: "Source-side change timestamp. Drives the CDC dedupe in silver."
+      - name: _record_hash
+        description: "Hash of the natural key plus source_updated_at."
+      - name: _batch_id
+        description: "dbt invocation_id of the run that landed this row."
+      - name: _loaded_at
+        description: "Warehouse load time, stamped from run_started_at."
+
+  - name: bronze_products
+    description: "Product catalog as landed, typed but unfiltered."
+    columns:
+      - name: product_id
+        tests:
+          - not_null:
+              config: {severity: warn}
+      - name: unit_price
+        tests:
+          - not_null:
+              config: {severity: warn}
+          - not_negative:
+              config: {severity: warn}
+
+  - name: bronze_orders
+    description: >
+      Order feed as landed, incrementally merged. Deliberately NOT unique on
+      order_id: the source replays orders and bronze keeps every version it was sent,
+      so the dedupe can be re-run with different rules without re-ingesting.
+    columns:
+      - name: order_id
+        tests:
+          - not_null:
+              config: {severity: warn}
+      - name: order_ts
+        tests:
+          - not_null:
+              config: {severity: warn}
+          - not_in_future:
+              arguments:
+                tolerance_days: 1
+              config: {severity: warn}
+      - name: payload
+        description: "Parsed VARIANT. Null when the source document was not valid JSON."
+        tests:
+          - not_null:
+              config: {severity: warn}
+      - name: _record_hash
+        description: "Merge key for the incremental load."
+        # Error, unlike everything else here. This one is not about data quality --
+        # it is the incremental strategy's correctness. A duplicate merge key means
+        # `merge` has two candidate source rows for one target row, which is
+        # non-deterministic in Snowflake and would make the table's contents depend
+        # on execution order.
+        tests:
+          - not_null
+          - unique
