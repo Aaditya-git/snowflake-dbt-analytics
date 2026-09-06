@@ -1,0 +1,216 @@
+version: 2
+
+models:
+
+  # ------------------------------------------------------------------ customers
+  - name: silver_customers
+    description: >
+      One row per customer, deduplicated to the latest CDC version, names trimmed and
+      cased, country conformed to ISO 3166-1 alpha-2, malformed emails nulled and
+      flagged. Safe to join on. Every test here is error severity: silver is the layer
+      that makes promises, so a failure should stop the build rather than warn.
+    columns:
+      - name: customer_id
+        description: "Natural key. Unique -- the CDC dedupe is what guarantees this."
+        tests: [not_null, unique]
+      - name: first_name
+        tests:
+          # Checks the normalisation, not the source. If the source sends ' Mia ' and
+          # this fails, the trim in int_customers_cleaned is broken.
+          - string_is_trimmed
+      - name: last_name
+        tests: [string_is_trimmed]
+      - name: email
+        description: "Lowercased address, or null when the source value was malformed."
+        tests:
+          - valid_email
+          # Nulls are expected and allowed, but a sudden collapse in coverage means
+          # the feed changed shape. A proportion test catches that; not_null cannot.
+          - dbt_utils.not_null_proportion:
+              arguments:
+                at_least: 0.75
+      - name: has_valid_email
+        description: "False where the source address was missing or malformed. CRM worklist."
+        tests: [not_null]
+      - name: country_code
+        description: "ISO 3166-1 alpha-2, or 'XX' where the source value was unrecognised."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['US', 'CA', 'BR', 'KR', 'IT', 'FR', 'DE', 'ES', 'PL', 'GH', 'NG', 'XX']
+          # 'XX' is valid but means the mapping has a gap. Warn so a new market shows
+          # up as a task rather than as a broken build.
+          - dbt_expectations.expect_column_values_to_not_be_in_set:
+              arguments:
+                value_set: ['XX']
+              config:
+                severity: warn
+      - name: signup_date
+        tests:
+          - not_null
+          - not_in_future
+
+  # ------------------------------------------------------------------- products
+  - name: silver_products
+    description: >
+      The sellable catalog: one row per product, deduplicated, categorised, and
+      guaranteed to carry a usable price. Products without a price are quarantined
+      rather than passed through, which is what keeps nulls out of revenue.
+    columns:
+      - name: product_id
+        tests: [not_null, unique]
+      - name: product_name
+        tests: [not_null, string_is_trimmed]
+      - name: category
+        tests:
+          - not_null
+          - string_is_trimmed
+      - name: unit_price
+        tests:
+          - not_null
+          # allow_zero false: a zero-priced product is either a data error or a
+          # giveaway that should be modelled as a promotion, not as a price.
+          - not_negative:
+              arguments:
+                allow_zero: false
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0.01
+                max_value: 10000
+
+  # --------------------------------------------------------------------- orders
+  - name: silver_orders
+    description: >
+      One row per order, header grain. Replays deduplicated to the latest version,
+      channel conformed, promo flag repaired against the promo code, and guaranteed to
+      resolve to a known customer.
+    tests:
+      # The repair, asserted. 'promo applied' with no code overstates discount
+      # attribution, so the invariant is worth stating rather than assuming.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "not promo_applied or promo_code is not null"
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          arguments:
+            min_value: 100
+            max_value: 100000
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_customers')
+                field: customer_id
+      - name: order_ts
+        tests:
+          - not_null
+          - not_in_future:
+              arguments:
+                tolerance_days: 1
+      - name: order_date
+        tests: [not_null]
+      - name: order_channel
+        description: "Conformed sales channel. 'other' captures anything the source invented."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['web', 'app', 'store', 'other']
+          # 'other' is legal but means a channel launched without telling the data
+          # team. Warn: the orders are still counted, the gap is still visible.
+          - dbt_expectations.expect_column_values_to_not_be_in_set:
+              arguments:
+                value_set: ['other']
+              config:
+                severity: warn
+      - name: promo_applied
+        tests: [not_null]
+      - name: payload_item_count
+        description: "Length of the payload's items[] array. Used to prove the FLATTEN lost nothing."
+        tests:
+          - not_null
+          - not_negative
+
+  # ---------------------------------------------------------------- order items
+  - name: silver_order_items
+    description: >
+      One row per product per order, exploded from the payload's items[] array. Every
+      line is priceable against the catalog; lines that were not are in the quarantine.
+    tests:
+      # The real primary key. `unique` on order_id would fail by design and `unique`
+      # on product_id is meaningless -- the grain only exists as a combination, and
+      # this is the test that defends it.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_id, line_number]
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_orders')
+                field: order_id
+      - name: line_number
+        description: "Position within the payload's items[] array. Distinguishes repeat SKUs."
+        tests: [not_null]
+      - name: product_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_products')
+                field: product_id
+      - name: quantity
+        tests:
+          - not_null
+          - not_negative:
+              arguments:
+                allow_zero: false
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 100
+
+  # ----------------------------------------------------------------- quarantine
+  - name: silver_quarantine
+    description: >
+      Every row rejected by a silver gate, with the reason and the dbt run that
+      rejected it. The point is that rejected data stays countable: "revenue looks
+      low" becomes a query against this table instead of an investigation.
+    columns:
+      - name: entity
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['customer', 'product', 'order', 'order_item']
+      - name: record_key
+        tests: [not_null]
+      - name: dq_failure_reason
+        description: "Why the row was rejected. Constrained so a new reason cannot appear silently."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - 'missing_customer_id'
+                  - 'unparseable_signup_date'
+                  - 'missing_product_id'
+                  - 'missing_product_name'
+                  - 'missing_unit_price'
+                  - 'non_positive_unit_price'
+                  - 'missing_order_id'
+                  - 'unparseable_order_ts'
+                  - 'malformed_json_payload'
+                  - 'future_dated_order'
+                  - 'unknown_customer'
+                  - 'missing_quantity'
+                  - 'non_positive_quantity'
+                  - 'unknown_or_unpriced_product'
+      - name: rejected_in_batch_id
+        tests: [not_null]
