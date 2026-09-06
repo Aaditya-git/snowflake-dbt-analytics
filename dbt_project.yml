@@ -1,8 +1,9 @@
 name: 'snowflake_dbt_analytics'
-version: '1.0.0'
+version: '2.0.0'
 config-version: 2
 
 profile: 'snowflake_dbt_analytics'
+require-dbt-version: [">=1.10.0", "<2.0.0"]
 
 model-paths: ["models"]
 seed-paths: ["seeds"]
@@ -16,15 +17,48 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
+vars:
+  # Stamped onto every bronze row so a record can be traced back to its feed.
+  source_system: 'ops_seed_extract'
+  # An order dated further ahead than this is a clock/source defect, not a pre-order.
+  future_order_tolerance_days: 1
+  # Share of rows a layer may reject before the pipeline is considered untrustworthy.
+  quarantine_warn_pct: 10
+  quarantine_error_pct: 20
+
 models:
   snowflake_dbt_analytics:
-    staging:
-      +materialized: view
-      +schema: staging
-    marts:
+    # Bronze: landed as-is, typed but never filtered. Persisted so a bad silver
+    # release can be rebuilt without going back to the source system.
+    bronze:
       +materialized: table
-      +schema: marts
+      +schema: bronze
+      +tags: ['bronze']
+    # Silver: deduplicated, conformed, quality-gated. Views -- cheap to rebuild,
+    # and the gate logic is what changes most often.
+    silver:
+      +materialized: view
+      +schema: silver
+      +tags: ['silver']
+    # Gold: dimensional models the BI layer reads. Tables, for query performance.
+    gold:
+      +materialized: table
+      +schema: gold
+      +tags: ['gold']
 
 seeds:
   snowflake_dbt_analytics:
-    +schema: raw
+    +schema: landing
+    +quote_columns: false
+
+snapshots:
+  snowflake_dbt_analytics:
+    +schema: snapshots
+
+tests:
+  # Off by default. store_failures writes a table per test whether or not the test
+  # failed, and 140-odd empty tables is clutter that makes the few that matter harder
+  # to find. It is switched on per test, in the tests that exist to be investigated
+  # rather than simply fixed.
+  +store_failures: false
+  +schema: dq_failures
