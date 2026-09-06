@@ -1,0 +1,221 @@
+version: 2
+
+models:
+
+  - name: dim_customers
+    description: "Type 1 customer dimension. One row per customer, current values only."
+    columns:
+      - name: customer_key
+        description: "Surrogate key. What the fact table joins on."
+        tests: [not_null, unique]
+      - name: customer_id
+        description: "Natural key. Kept alongside the surrogate for lineage and debugging."
+        tests: [not_null, unique]
+      - name: full_name
+        tests: [not_null, string_is_trimmed]
+      - name: country_code
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_value_lengths_to_be_between:
+              arguments:
+                min_value: 2
+                max_value: 2
+      - name: days_since_signup
+        tests:
+          - not_negative
+
+  - name: dim_products
+    description: >
+      Type 2 product dimension. One row per version of a product with a half-open
+      validity window [valid_from, valid_to). The fact joins on the version that was
+      in effect when the order was placed, so a price change does not rewrite history.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [product_id, valid_from]
+    columns:
+      - name: product_key
+        description: "Surrogate key over (product_id, valid_from). Unique per version."
+        tests: [not_null, unique]
+      - name: product_id
+        description: "Natural key. Repeats across versions -- deliberately not unique."
+        tests: [not_null]
+      - name: unit_price
+        tests:
+          - not_null
+          - not_negative:
+              arguments:
+                allow_zero: false
+      - name: valid_from
+        tests: [not_null]
+      - name: valid_to
+        tests: [not_null]
+      - name: is_current
+        description: "True for the open version. Exactly one per product."
+        tests: [not_null]
+
+  - name: dim_dates
+    description: "Date dimension, 2023-01-01 through 2026-12-31, generated from a spine."
+    tests:
+      # A spine that silently generates the wrong range is the sort of thing nobody
+      # checks until a join starts dropping rows. 1461 = four years including 2024's
+      # leap day; if that number is wrong the spine arguments are wrong.
+      - dbt_expectations.expect_table_row_count_to_equal:
+          arguments:
+            value: 1461
+    columns:
+      - name: date_key
+        tests: [not_null, unique]
+      - name: calendar_year
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 2023
+                max_value: 2026
+      - name: calendar_month
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 12
+      - name: is_weekend
+        tests: [not_null]
+
+  - name: fct_order_items
+    description: >
+      Star schema centre. Grain: one row per product per order. Measures are quantity,
+      unit_price (the price in effect at order time) and line_amount.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_id, line_number]
+      # Arithmetic invariant. Cheap, and it fails loudly the day someone "optimises"
+      # the rounding or swaps the join to a dimension at the wrong grain.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "line_amount = round(quantity * unit_price, 2)"
+    columns:
+      - name: order_item_key
+        description: "Surrogate key over (order_id, line_number)."
+        tests: [not_null, unique]
+      - name: customer_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_key
+      - name: product_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_key
+      - name: order_date
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_dates')
+                field: date_key
+      - name: order_channel
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['web', 'app', 'store', 'other']
+      - name: quantity
+        tests:
+          - not_null
+          - not_negative:
+              arguments:
+                allow_zero: false
+      - name: unit_price
+        tests:
+          - not_null
+          - not_negative:
+              arguments:
+                allow_zero: false
+      - name: line_amount
+        description: "quantity * unit_price, rounded to cents. The additive measure."
+        tests:
+          - not_null
+          - not_negative
+          # Reconciles the fact's total against the aggregate built from it. The two
+          # are allowed to be computed differently; they are not allowed to disagree.
+          - sum_matches_upstream:
+              arguments:
+                compare_model: ref('fct_daily_sales')
+                compare_expression: gross_revenue
+                tolerance: 0.01
+
+  - name: fct_daily_sales
+    description: >
+      Daily revenue by channel, pre-aggregated from fct_order_items. Grain: one row
+      per order_date per order_channel.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_date, order_channel]
+    columns:
+      - name: order_date
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_dates')
+                field: date_key
+      - name: order_channel
+        tests: [not_null]
+      - name: order_count
+        tests:
+          - not_null
+          - not_negative:
+              arguments:
+                allow_zero: false
+      - name: units_sold
+        tests: [not_null, not_negative]
+      - name: gross_revenue
+        tests: [not_null, not_negative]
+      - name: promo_revenue
+        tests: [not_null, not_negative]
+      - name: avg_order_value
+        tests: [not_null, not_negative]
+
+  - name: dq_layer_reconciliation
+    description: >
+      Row counts and rejection rates for every model in the pipeline, as data. Read it
+      to answer "is the pipeline healthy" without opening a log, and trend it to catch
+      a source that is degrading rather than failing.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [layer, model_name]
+      # The soft tier. The hard tier is assert_quarantine_rate_within_tolerance,
+      # which errors at the higher threshold; this one warns before it gets there,
+      # so a drift shows up in a run summary a few days before it breaks a build.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "rejected_pct <= {{ var('quarantine_warn_pct') }}"
+          config:
+            severity: warn
+    columns:
+      - name: layer
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['bronze', 'silver', 'gold']
+      - name: model_name
+        tests: [not_null]
+      - name: row_count
+        tests: [not_null, not_negative]
+      - name: rejected_row_count
+        tests: [not_null, not_negative]
+      - name: rejected_pct
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+                inclusive: true

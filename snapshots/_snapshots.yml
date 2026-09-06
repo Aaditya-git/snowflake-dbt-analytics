@@ -1,0 +1,22 @@
+version: 2
+
+snapshots:
+  - name: products_snapshot
+    description: >
+      Type 2 history of the product catalog. One row per version of a product, with
+      dbt-managed dbt_valid_from / dbt_valid_to windows. This is the raw history;
+      dim_products is the modelled view of it.
+    columns:
+      - name: dbt_scd_id
+        description: "dbt's surrogate key for a version."
+        tests: [not_null, unique]
+      - name: product_id
+        tests: [not_null]
+      - name: unit_price
+        tests:
+          - not_null
+          - not_negative:
+              arguments:
+                allow_zero: false
+      - name: dbt_valid_from
+        tests: [not_null]
