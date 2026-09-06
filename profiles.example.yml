@@ -1,7 +1,14 @@
-# Copy this to ~/.dbt/profiles.yml (or set the env vars below) and fill in your Snowflake details.
+# Copy to ~/.dbt/profiles.yml (or set the SNOWFLAKE_* env vars) and fill in your details.
+#
+# Two targets, because macros/generate_schema_name.sql branches on the target name:
+# `prod` builds into bare BRONZE / SILVER / GOLD schemas that BI tools can hard-code,
+# everything else builds into <your_schema>_bronze / _silver / _gold so two engineers
+# can develop at once without overwriting each other.
+
 snowflake_dbt_analytics:
   target: dev
   outputs:
+
     dev:
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
@@ -9,7 +16,23 @@ snowflake_dbt_analytics:
       password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
       role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORMER') }}"
       warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH') }}"
-      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ANALYTICS') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ANALYTICS_DEV') }}"
+      # Personal sandbox. Layer schemas become e.g. DBT_AADITYA_SILVER.
+      schema: "{{ env_var('SNOWFLAKE_SCHEMA', 'dbt_dev') }}"
+      threads: 8
+      client_session_keep_alive: false
+
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      # Key-pair rather than a password: service accounts should not have one, and
+      # Snowflake now requires MFA for password auth on human users anyway.
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('SNOWFLAKE_PROD_ROLE', 'TRANSFORMER_PROD') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_PROD_WAREHOUSE', 'TRANSFORM_WH') }}"
+      database: "{{ env_var('SNOWFLAKE_PROD_DATABASE', 'ANALYTICS') }}"
       schema: dbt
-      threads: 4
+      threads: 12
       client_session_keep_alive: false
