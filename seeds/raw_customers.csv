@@ -1,6 +1,16 @@
-customer_id,first_name,last_name,email,country,signup_date
-1,Ava,Martinez,Ava.Martinez@example.com,USA,2023-01-15
-2,Liam,Chen,liam.chen@example.com,Canada,2023-02-03
-3,Noah,Patel,noah.patel@example.com,USA,2023-02-20
-4,Emma,Johnson,Emma.Johnson@example.com,UK,2023-03-11
-5,Olivia,Kim,olivia.kim@example.com,USA,2023-04-05
+customer_id,first_name,last_name,email,country,signup_date,updated_at
+1,Ava,Martinez,Ava.Martinez@example.com,USA,2023-01-15,2023-01-15 08:00:00
+2,Liam,Chen,liam.chen@example.com,Canada,2023-02-03,2023-02-03 08:00:00
+3,Noah,Patel,noah.patel@example.com,USA,2023-02-20,2023-02-20 08:00:00
+4,Emma,Silva,emma.silva@example.com,Brazil,2023-03-11,2023-03-11 08:00:00
+5,Olivia,Kim,olivia.kim@example.com,South Korea,2023-03-28,2023-03-28 08:00:00
+6,  Mia ,Rossi , MIA.Rossi@example.com ,italy,2023-04-05,2023-04-05 08:00:00
+7,Ethan,Brown,ETHAN.BROWN@example.com,United States,2023-04-19,2023-04-19 08:00:00
+8,Sophia,Dubois,sophia.dubois@example.com,France,2023-05-02,2023-05-02 08:00:00
+9,Lucas,Muller,,Germany,2023-05-14,2023-05-14 08:00:00
+10,Isabella,Garcia,isabella.garcia@example.com,Spain,2023-06-01,2023-06-01 08:00:00
+11,James,Wilson,james.wilson@example.com,us,2023-06-18,2023-06-18 08:00:00
+12,Amelia,Novak,amelia.novak@example.com,Poland,2023-07-07,2023-07-07 08:00:00
+3,Noah,Patel,noah.patel@newmail.com,USA,2023-02-20,2023-09-01 11:32:00
+13,Henry,Osei,henry.osei.example.com,Ghana,2023-07-21,2023-07-21 08:00:00
+,Grace,Okonkwo,grace.okonkwo@example.com,Nigeria,2023-08-02,2023-08-02 08:00:00

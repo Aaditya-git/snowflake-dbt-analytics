@@ -1,7 +1,13 @@
-product_id,product_name,category,unit_price
-101,Wireless Mouse,Accessories,24.99
-102,Mechanical Keyboard,Accessories,89.00
-103,27in Monitor,Displays,229.50
-104,USB-C Hub,Accessories,39.95
-105,Laptop Stand,Accessories,34.00
-106,4K Webcam,Peripherals,119.99
+product_id,product_name,category,unit_price,updated_at
+101,Wireless Mouse,Accessories,24.99,2023-01-02 00:00:00
+102,Mechanical Keyboard,Accessories,89.00,2023-01-02 00:00:00
+103,27-inch Monitor,Displays,219.50,2023-01-02 00:00:00
+104,USB-C Hub,Accessories,45.00,2023-01-02 00:00:00
+105,Laptop Stand,Accessories,32.25,2023-01-02 00:00:00
+106,Noise Cancelling Headphones,Audio,199.99,2023-01-02 00:00:00
+107,Webcam 1080p,Video,59.00,2023-01-02 00:00:00
+108,Desk Lamp,Lighting,38.50,2023-01-02 00:00:00
+109,Ergonomic Chair,Furniture,349.00,2023-01-02 00:00:00
+110,Cable Organizer,Accessories,,2023-01-02 00:00:00
+111,Portable SSD 1TB,Storage,129.99,2023-01-02 00:00:00
+112,Bluetooth Speaker,,64.00,2023-01-02 00:00:00

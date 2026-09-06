@@ -1,0 +1,41 @@
+version: 2
+
+seeds:
+  - name: raw_customers
+    description: >
+      Landing zone for the customer feed. Stands in for the raw files an ingestion
+      tool (Fivetran, Snowpipe, an S3 stage) would drop into Snowflake. Everything
+      is loaded as text on purpose: a landing table that casts is a landing table
+      that can reject a row, and the whole point of this layer is that it never
+      rejects anything.
+    config:
+      column_types:
+        customer_id: varchar(50)
+        first_name: varchar(200)
+        last_name: varchar(200)
+        email: varchar(320)
+        country: varchar(100)
+        signup_date: varchar(50)
+        updated_at: varchar(50)
+
+  - name: raw_products
+    description: "Landing zone for the product catalog feed. All columns text, see raw_customers."
+    config:
+      column_types:
+        product_id: varchar(50)
+        product_name: varchar(200)
+        category: varchar(100)
+        unit_price: varchar(50)
+        updated_at: varchar(50)
+
+  - name: raw_orders
+    description: >
+      Landing zone for the order feed. `payload` is a semi-structured JSON document
+      (channel, device, promo, and a nested items[] array) held as text, exactly as
+      a VARIANT column would arrive from an event stream.
+    config:
+      column_types:
+        order_id: varchar(50)
+        customer_id: varchar(50)
+        order_ts: varchar(50)
+        payload: varchar(16777216)
